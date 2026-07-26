@@ -152,25 +152,179 @@ def retrieve_relevant_chunks(query: str, chunks: Sequence[str], top_k: int = 3) 
     return [chunk for _, chunk in scored[:top_k]]
 
 
+STOP_WORDS = {
+    "de", "la", "el", "en", "es", "un", "una", "que", "los", "las", "del", "al", "no",
+    "y", "o", "con", "por", "para", "su", "sus", "este", "esta", "estos", "estas",
+    "son", "ser", "estar", "más", "como", "cuando", "cuál", "cuáles", "dónde", "adónde",
+    "cómo", "qué", "quién", "quien", "cuyo", "cuya", "cuyos", "cuyas", "yo", "tú",
+    "él", "ella", "nosotros", "vosotros", "ellos", "ellas", "me", "te", "se", "lo",
+    "la", "le", "les", "nos", "os", "mi", "mis", "tu", "tus", "su", "sus", "este",
+    "esta", "es", "son", "lo", "si", "ya", "muy", "todo", "cada", "cualquier",
+    "algún", "alguna", "ningún", "ninguna", "demasiado", "sino", "también", "desde",
+    "hasta", "sobre", "entre", "sin", "sob", "tan", "tanto", "sea", "siendo", "ser",
+    "sido", "está", "está", "están", "estamos", "estan",
+}
+
+
 def answer_question(question: str, knowledge_base: str) -> str:
     """Responde una pregunta utilizando el conocimiento disponible."""
-    normalized = question.strip().lower()
+    sanitized = sanitize_question(question)
+
+    if not sanitized:
+        return "Por favor, introduce una pregunta."
+
+    normalized = sanitized.lower()
+
     if "qué es" in normalized or "que es" in normalized or "quién" in normalized or "quien" in normalized or "describe" in normalized:
-        if "empresa" in normalized or "cybersecurity" in normalized:
+        if "empresa" in normalized or "cybersecurity" in normalized or "cybersecurity dr" in normalized:
             if "cybersecurity dr" in knowledge_base.lower() or "empresa" in knowledge_base.lower():
                 return "Cybersecurity DR es una empresa especializada en ciberseguridad que ofrece servicios de respuesta a incidentes, recuperación ante desastres, consultoría, auditoría, pentesting y operaciones de seguridad gestionadas."
 
+    qa_pairs = _extract_qa_pairs(knowledge_base)
+    if qa_pairs:
+        best = _find_best_match(sanitized, qa_pairs)
+        if best:
+            return best
+
     chunks = chunk_text(knowledge_base)
-    relevant = retrieve_relevant_chunks(question, chunks, top_k=3)
+    relevant = retrieve_relevant_chunks(sanitized, chunks, top_k=3)
 
     if not relevant:
         return "No encontré información suficiente en la base de conocimiento para responder esa pregunta."
 
     for chunk in relevant:
         if "Respuesta:" in chunk:
-            return chunk.split("Respuesta:", 1)[1].strip()
+            answer_text = chunk.split("Respuesta:", 1)[1].strip()
+            next_q = answer_text.find("Pregunta:")
+            if next_q != -1:
+                answer_text = answer_text[:next_q].strip()
+            if answer_text:
+                return answer_text
+            return "No encontré información suficiente en la base de conocimiento para responder esa pregunta."
 
     return relevant[0].strip()
+
+
+def _extract_qa_pairs(knowledge_base: str) -> list[tuple[str, str]]:
+    """Extrae pares pregunta-respuesta del conocimiento combinado."""
+    pairs = []
+
+    csv_pattern = re.compile(r'Pregunta:\s*(.+?)\nRespuesta:\s*(.+?)(?=\n(?:Pregunta:|\Z))', re.DOTALL)
+    for match in csv_pattern.finditer(knowledge_base):
+        q = match.group(1).strip().rstrip("?")
+        a = match.group(2).strip().rstrip(".")
+        if q and a:
+            pairs.append((q, a))
+
+    faq_pattern = re.compile(r'\*\*P:\s*(.+?)\*\*\nR:\s*(.+?)(?=\n\*\*P|\n---|\n#|\Z)', re.DOTALL)
+    for match in faq_pattern.finditer(knowledge_base):
+        q = match.group(1).strip().rstrip("?")
+        a = match.group(2).strip().rstrip(".")
+        if q and a:
+            pairs.append((q, a))
+
+    return pairs
+
+
+def _find_best_match(question: str, qa_pairs: list[tuple[str, str]]) -> str | None:
+    """Encuentra la respuesta más relevante para la pregunta dada."""
+    q_tokens = _get_tokens(question)
+
+    best_score = 0
+    best_answer = None
+
+    for stored_q, answer in qa_pairs:
+        stored_tokens = _get_tokens(stored_q)
+
+        if not stored_tokens:
+            continue
+
+        overlap = q_tokens & stored_tokens
+
+        starts_with = question.lower().startswith(stored_q.lower())
+
+        score = len(overlap) * 3
+        if starts_with:
+            score += 10
+        if q_tokens.issubset(stored_tokens) or stored_tokens.issubset(q_tokens):
+            score += 5
+
+        if score > best_score:
+            best_score = score
+            best_answer = answer
+
+    if best_score >= 2:
+        return best_answer
+    return None
+
+
+def _get_tokens(text: str) -> set[str]:
+    """Extrae tokens significativos de un texto, eliminando stopwords."""
+    tokens = re.split(r'\W+', text.lower())
+    return {t for t in tokens if t and t not in STOP_WORDS and len(t) > 1}
+
+
+def _match_csv_qa(question: str, knowledge_base: str) -> List[str]:
+    """Busca coincidencias exactas de preguntas en formato CSV (Pregunta/Respuesta)."""
+    answers: List[str] = []
+    q_lower = question.lower()
+
+    pattern = re.compile(r'Pregunta:\s*(.+?)\nRespuesta:\s*(.+?)(?=\n\n|\Z)', re.DOTALL)
+    for match in pattern.finditer(knowledge_base):
+        csv_question = match.group(1).strip().lower()
+        csv_answer = match.group(2).strip()
+        if not csv_answer or not csv_question:
+            continue
+
+        if q_lower in csv_question or csv_question in q_lower:
+            answers.append(csv_answer)
+        elif _tokens_overlap(q_lower, csv_question):
+            answers.append(csv_answer)
+
+    return answers
+
+
+def _match_markdown_qa(question: str, knowledge_base: str) -> List[str]:
+    """Busca enMarkdown headers que coincidan con la pregunta."""
+    answers: List[str] = []
+    q_lower = question.lower()
+
+    lines = knowledge_base.splitlines()
+    current_header = ""
+    current_text: List[str] = []
+
+    for line in lines:
+        heading_match = re.match(r'^#{1,6}\s+(.+)$', line)
+        if heading_match:
+            if current_header and current_text:
+                header_lower = current_header.lower()
+                text_block = " ".join(current_text).lower()
+                if q_lower in header_lower or header_lower in q_lower or _tokens_overlap(q_lower, header_lower + " " + text_block):
+                    answers.append(" ".join(current_text).strip())
+            current_header = heading_match.group(1).strip()
+            current_text = []
+        elif current_header:
+            stripped = line.strip().lstrip('-*•').strip()
+            if stripped:
+                current_text.append(stripped)
+
+    if current_header and current_text:
+        header_lower = current_header.lower()
+        text_block = " ".join(current_text).lower()
+        if q_lower in header_lower or header_lower in q_lower or _tokens_overlap(q_lower, header_lower + " " + text_block):
+            answers.append(" ".join(current_text).strip())
+
+    return answers
+
+
+def _tokens_overlap(q: str, text: str) -> bool:
+    """Devuelve True si hay suficiente solapamiento de tokens entre pregunta y texto."""
+    q_tokens = set(re.split(r'\W+', q)) - {''}
+    t_tokens = set(re.split(r'\W+', text)) - {''}
+    if not q_tokens or not t_tokens:
+        return False
+    overlap = q_tokens & t_tokens
+    return len(overlap) >= max(2, len(q_tokens) * 0.4)
 
 
 def format_chat_message(text: str) -> str:
