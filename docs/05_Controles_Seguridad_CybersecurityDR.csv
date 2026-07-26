@@ -1,0 +1,9 @@
+id_control,categoria_nist,nombre_control,estado_implementacion,efectividad,ultima_revision,evidencia
+ID.AM-1,Identificar,Inventario de activos físicos y virtuales,Implementado,Alta,2026-06-01,CMDB actualizado + este CSV
+PR.AC-1,Proteger,Identidades y credenciales son gestionadas,Implementado,Alta,2026-05-15,Azure AD + MFA habilitado
+PR.DS-1,Proteger,Datos en reposo están protegidos,Implementado,Alta,2026-06-10,Cifrado AES-256 en discos y BD
+PR.IP-1,Proteger,Procesos y procedimientos de protección definidos,Implementado,Media,2026-04-20,Política de Seguridad v2.0
+DE.AE-1,Detectar,Análisis de anomalías y eventos,Implementado,Alta,2026-07-01,SIEM con 150+ reglas de correlación
+RS.RP-1,Responder,Plan de respuesta ejecutado durante incidentes,Implementado,Alta,2026-03-10,Plan de Respuesta a Incidentes v3.1
+RC.CO-1,Recuperar,Comunicación pública sobre recuperación,Implementado,Media,2026-02-28,Plantillas de comunicación aprobadas
+PR.MA-1,Proteger,Mantenimiento y reparación de activos,En progreso,Media,2026-07-15,Programa de parches en desarrollo

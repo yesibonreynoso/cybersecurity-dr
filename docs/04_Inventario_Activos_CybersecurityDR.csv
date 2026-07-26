@@ -1,0 +1,9 @@
+id_activo,nombre_activo,tipo,criticidad,rto_horas,rpo_minutos,estado_backup,responsable,ultima_prueba_restauracion,ubicacion
+ACT-001,SIEM Principal (Splunk),Aplicación,Crítica,1,15,Replicación síncrona,Equipo SOC,2026-07-15,OCI-Region-1
+ACT-002,Base de Datos Clientes (PostgreSQL),Base de Datos,Crítica,4,60,Incremental horario,DBA,2026-07-10,OCI-Region-1
+ACT-003,Servidor Web Principal (Nginx),Servidor,Alta,2,30,Snapshot cada 6h,DevOps,2026-07-20,OCI-Region-1
+ACT-004,Firewall Perímetro (Palo Alto),Red,Crítica,1,0,Config export diario,Network Sec,2026-06-30,On-Premise / DMZ
+ACT-005,Backup Server (Veeam),Infraestructura,Crítica,1,15,Air-gapped diario,Infraestructura,2026-07-22,OCI-Region-2
+ACT-006,Active Directory (Azure AD),Identidad,Crítica,1,5,Geo-replicación,Identity Team,2026-07-18,Azure AD Global
+ACT-007,Repositorio Código (GitLab),Desarrollo,Alta,8,120,Git remoto + mirror,DevSecOps,2026-07-25,OCI-Region-1
+ACT-008,Agente IA Cybersecurity DR (FastAPI),Aplicación,Media,4,60,Snapshot diario,Equipo IA,2026-07-12,OCI-Region-1
