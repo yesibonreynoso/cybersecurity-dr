@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 
 from herramientas import (
+    _extract_qa_pairs,
+    _find_best_match,
     answer_question,
     build_answer,
     build_answer_with_sources,
@@ -172,6 +174,51 @@ class AgentTests(unittest.TestCase):
             self.assertIn("notas.md", names)
             self.assertNotIn("imagen.png", names)
             self.assertNotIn("script.py", names)
+
+
+    def test_answer_question_returns_csv_answer(self):
+        knowledge = "Pregunta: ¿Qué es phishing?\nRespuesta: El phishing es un ataque de ingeniería social."
+        answer = answer_question("¿Qué es phishing?", knowledge)
+        self.assertEqual(answer, "El phishing es un ataque de ingeniería social")
+
+    def test_answer_question_extracts_faq_pairs(self):
+        knowledge = "**P: ¿Qué es el RTO y el RPO?**\nR: El RTO es el tiempo máximo de inactividad permitido."
+        pairs = _extract_qa_pairs(knowledge)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0][0], "¿Qué es el RTO y el RPO")
+        self.assertIn("RTO", pairs[0][1])
+
+    def test_find_best_match_exact_token_overlap(self):
+        qa_pairs = [
+            ("¿Qué es phishing?", "El phishing es un ataque de ingeniería social"),
+            ("¿Qué es la autenticación multifactor?", "Es un mecanismo de seguridad que exige más de un factor"),
+        ]
+        result = _find_best_match("autenticación multifactor", qa_pairs)
+        self.assertIn("mecanismo de seguridad", result)
+
+    def test_answer_question_with_combined_sources(self):
+        csv_text = load_document(Path("data/ciberseguridad.csv"))
+        faq_text = load_document(Path("docs/03_FAQ_Servicios_CybersecurityDR.md"))
+        combined = csv_text + "\n\n" + faq_text
+
+        questions_and_answers = [
+            ("¿Qué es phishing?", "phishing"),
+            ("¿Cómo puedo protegerme de un phishing?", "Verifica la URL"),
+            ("¿Qué incluye el servicio de SOC gestionado?", "monitoreo"),
+            ("¿Cuáles son los pasos para reportar un incidente?", "CSIRT"),
+            ("¿Qué es el RTO y el RPO?", "RTO"),
+            ("¿En qué nube se despliega la plataforma?", "OCI"),
+            ("¿Qué certificaciones tienen?", "CISSP"),
+            ("¿Qué es Cybersecurity DR?", "Cybersecurity DR"),
+        ]
+        for question, expected_term in questions_and_answers:
+            ans = answer_question(question, combined)
+            self.assertIn(expected_term, ans, f"Failed for question: {question}")
+
+    def test_answer_question_rejects_unknown_questions(self):
+        knowledge = "Pregunta: ¿Qué es phishing?\nRespuesta: El phishing es un ataque."
+        answer = answer_question("¿Qué es la fotosíntesis?", knowledge)
+        self.assertIn("No encontré", answer)
 
 
 if __name__ == "__main__":
