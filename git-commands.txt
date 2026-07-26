@@ -1,0 +1,5 @@
+git add .
+git commit -m "Primer commit: agente conversacional de ciberseguridad"
+git branch -M main
+git remote add origin <URL_DEL_REPOSITORIO_GITHUB>
+git push -u origin main
