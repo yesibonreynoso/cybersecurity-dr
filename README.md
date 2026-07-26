@@ -1,95 +1,156 @@
-# Agente de Ciberseguridad
+# Cybersecurity DR Assistant
 
-Este proyecto implementa un agente conversacional capaz de responder preguntas sobre ciberseguridad utilizando un documento oficial de Cybersecurity DR como base principal y permitiendo además agregar documentos adicionales como contexto. La solución está preparada para ejecutarse desde consola y también como una interfaz web con Streamlit, con una experiencia visual más atractiva y organizada.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.44%2B-ff4b4b)](https://streamlit.io/)
+[![PyMuPDF](https://img.shields.io/badge/PyMuPDF-1.26%2B-blue)](https://pymupdf.readthedocs.io/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-## Descripción general
+Agente inteligente de ciberseguridad que responde preguntas basadas en el contenido de documentos locales (CSV, Markdown, TXT, PDF). Interfaz web interactiva construida con Streamlit.
 
-El agente carga documentos de conocimiento, extrae su contenido, divide el texto en fragmentos, identifica los segmentos más relevantes para la consulta del usuario y devuelve una respuesta basada en esa información. También permite trabajar con múltiples documentos en una sola conversación.
+## 📖 Descripción general
 
-## Arquitectura de la solución
+Cybersecurity DR Assistant es un agente conversacional que permite consultar información de seguridad almacenada en documentos locales. El usuario puede hacer preguntas en lenguaje natural y el agente busca en las fuentes activas para generar respuestas fundamentadas. El sistema soporta múltiples formatos de documento, selección dinámica de fuentes, y ofrece historial de conversación con atribución de fuentes.
 
-- Documento oficial: el sistema puede usar un documento principal de Cybersecurity DR como fuente base.
-- Documentos adicionales: cualquier persona puede subir archivos extra para enriquecer el contexto de las respuestas.
-- Carga de documentos: el sistema acepta archivos CSV, Markdown, TXT y PDF.
-- Procesamiento del texto: el contenido se divide en fragmentos pequeños para facilitar la recuperación.
-- Recuperación de contexto: se comparan palabras clave de la pregunta con los fragmentos disponibles.
-- Generación de respuesta: se devuelve la respuesta más relevante para la consulta del usuario.
-- Interfaz web: Streamlit ofrece una experiencia conversacional, visual y fácil de usar.
+## 🏗️ Arquitectura de la solución
 
-## Tecnologías y herramientas
+```
+┌─────────────────────────────────────────────────────┐
+│              Streamlit Web Interface                │
+│  ┌──────────┐  ┌───────────┐  ┌─────────────────┐ │
+│  │ Chat UI  │  │ Source    │  │ Follow-up       │ │
+│  │          │  │ Manager   │  │ Suggestions     │ │
+│  └────┬─────┘  └─────┬─────┘  └─────────────────┘ │
+│       │               │                             │
+│       ▼               ▼                             │
+│  ┌──────────────────────────────────────────────┐  │
+│  │            herramientas.py (Core)           │  │
+│  │  ┌─────────┐ ┌──────────┐ ┌─────────────┐ │  │
+│  │  │ Sanitize│ │ Chunking │ │ Relevance   │ │  │
+│  │  │ Input   │ │          │ │ Scoring     │ │  │
+│  │  └─────────┘ └──────────┘ └─────────────┘ │  │
+│  │  ┌─────────┐ ┌──────────────┐ ┌──────────┐│  │
+│  │  │Load CSV/│ │Load PDF/MD   │ │Answer    ││  │
+│  │  │TXT/PDF  │ │TXT           │ │Engine    ││  │
+│  │  └─────────┘ └──────────────┘ └──────────┘│  │
+│  └──────────────────────────────────────────────┘  │
+│       │               │                             │
+│       ▼               ▼                             │
+│  ┌──────────┐  ┌──────────────┐                    │
+│  │ data/    │  │ docs/        │   Archivos de    │
+│  │ ciberseg │  │ 01_Politica  │   conocimiento   │
+│  │ .csv/.md │  │ 02_Plan_DR   │                    │
+│  │          │  │ 03_FAQ       │                    │
+│  └──────────┘  └──────────────┘                    │
+└─────────────────────────────────────────────────────┘
+```
 
-- Python 3.14
-- Streamlit para la interfaz web
-- PyMuPDF para lectura de PDF
-- CSV, Markdown y TXT como fuentes de conocimiento
-- unittest para pruebas
-- Docker para despliegue portable
+### Flujo de trabajo
+1. El usuario envía una pregunta desde la interfaz web.
+2. `streamlit_app.py` recibe la pregunta y la limpia mediante `sanitize_question()`.
+3. Se obtienen las fuentes activas seleccionadas (CSV, MD, PDF, TXT).
+4. Cada fuente se carga con `load_document()` y se combina en un corpus de conocimiento.
+5. `answer_question()` segmenta el texto en fragmentos (`chunk_text()`), los puntúa por relevancia (`retrieve_relevant_chunks()`) y genera una respuesta.
+6. La respuesta se muestra con atribución de fuentes (nombre del documento origen).
 
-## Estructura del proyecto
+## 🛠️ Tecnologías y herramientas
 
-- data/: documentos y recursos de conocimiento
-- data/knowledge/docs/: documentos de referencia
-- data/knowledge/text/: textos y materiales de apoyo
-- data/knowledge/images/: imágenes de apoyo
-- tests/: pruebas básicas del agente
-- docs/: documentación adicional de despliegue
+| Componente | Tecnología |
+|------------|------------|
+| Interfaz web | Streamlit 1.44+ |
+| Backend | Python 3.10+ (stdlib) |
+| Parsing CSV | `csv` (stdlib) |
+| Parsing PDF | PyMuPDF (fitz) |
+| Parsing Markdown/TXT | `pathlib` + encoding UTF-8 |
+| Containerización | Docker (python:3.12-slim) |
+| Pruebas | `unittest` (stdlib) |
+| Gestión de dependencias | `requirements.txt` |
 
-## Ejecución local
+## ▶️ Instrucciones de ejecución
 
-1. Activar el entorno virtual:
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
-   ```
-2. Instalar dependencias:
-   ```powershell
-   python -m pip install -r requirements.txt
-   ```
-3. Ejecutar la versión de consola:
-   ```powershell
-   python app.py
-   ```
-4. Ejecutar la interfaz web:
-   ```powershell
-   streamlit run streamlit_app.py
-   ```
+### Requisitos previos
+- Python 3.10 o superior
+- pip
 
-## Ejemplos de preguntas
+### Instalación local
+```bash
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-- ¿Qué es phishing?
-- ¿Cómo puedo protegerme de un phishing?
-- ¿Qué hacer si detecto un ataque de ransomware?
-- ¿Qué es la autenticación multifactor?
-- ¿Qué medidas tomar ante un incidente de seguridad?
+### Ejecución de la aplicación
+```bash
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.headless true --server.port 8502
+```
 
-## Ejemplos de respuestas generadas
+La aplicación quedará disponible en `http://localhost:8502`.
 
-- El phishing es un ataque de ingeniería social que intenta engañar a las personas para que compartan credenciales o datos sensibles.
-- Verifica la URL, no hagas clic en enlaces sospechosos, activa la autenticación multifactor y reporta correos dudosos.
-- La autenticación multifactor exige más de un factor para verificar la identidad del usuario.
-
-## Uso para profesores y evaluadores
-
-Para usar el agente con material propio, basta con colocar los archivos en las carpetas de apoyo:
-
-- Documentos: data/knowledge/docs
-- Texto: data/knowledge/text
-- Imágenes: data/knowledge/images
-
-Luego, en la interfaz se pueden subir o seleccionar esos recursos para que el agente responda preguntas sobre ellos.
-
-## Despliegue en OCI
-
-La aplicación está preparada para desplegarse en OCI mediante Docker o un servicio de aplicaciones web. La guía de despliegue se encuentra en docs/deploy-oci.md.
-
-```powershell
+### Ejecución con Docker
+```bash
 docker build -t agente-ciberseguridad .
 docker run -p 8501:8501 agente-ciberseguridad
 ```
 
-## Evidencia de funcionamiento
-
-El proyecto incluye pruebas básicas que validan la carga del documento y la recuperación de contexto.
-
-```powershell
-python -m unittest discover -s tests -v
+### Ejecución de pruebas
+```bash
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+## 💡 Ejemplos de preguntas y respuestas
+
+### Preguntas frecuentes soportadas por el documento base:
+
+**Pregunta:** ¿Qué es phishing?
+**Respuesta generada:** El phishing es un ataque de ingeniería social que intenta engañar a las personas para que compartan credenciales o datos sensibles.
+
+**Pregunta:** ¿Cómo puedo protegerme de un phishing?
+**Respuesta generada:** Verifica la URL, no hagas clic en enlaces sospechosos, activa la autenticación multifactor y reporta correos dudosos.
+
+**Pregunta:** ¿Qué hacer si detecto un ataque de ransomware?
+**Respuesta generada:** Aísla el equipo de la red, desconecta el cable de red o Wi‑Fi, notifica al área de seguridad y sigue los protocolos de respuesta.
+
+**Pregunta:** ¿Qué es la autenticación multifactor?
+**Respuesta generada:** Es un mecanismo de seguridad que exige más de un factor para verificar la identidad del usuario.
+
+**Pregunta:** ¿Qué es la seguridad de datos?
+**Respuesta generada:** La seguridad de datos protege la información frente a accesos no autorizados, pérdida o alteración.
+
+**Pregunta:** ¿Qué es Cybersecurity DR?
+**Respuesta generada:** Cybersecurity DR es una empresa especializada en ciberseguridad que ofrece servicios de respuesta a incidentes, recuperación ante desastres, consultoría, auditoría, pentesting y operaciones de seguridad gestionadas.
+
+## 📸 Evidencia de despliegue
+
+### Despliegue en OCI
+La aplicación está preparada para desplegarse en Oracle Cloud Infrastructure (OCI) mediante Docker:
+
+1. Construir la imagen: `docker build -t agente-ciberseguridad .`
+2. Ejecutar: `docker run -p 8501:8501 agente-ciberseguridad`
+3. La aplicación queda disponible en el puerto 8501 del contenedor.
+
+Para producción en OCI, se recomienda:
+- Usar una instancia VM.Standard.E2.1.Micro (nivel Always Free) o un shape flexibles.
+- Exponer el puerto 8501 en el security list del VCN.
+- Configurar un reverse proxy (Nginx) con SSL/TLS para acceso HTTPS.
+
+## 🔒 Seguridad
+
+- Validación de longitud de entrada (máximo 500 caracteres por pregunta).
+- Sanitización de caracteres peligrosos en preguntas del usuario.
+- Validación de extensiones de archivo en subidas.
+- Protección contra path traversal en rutas de archivos.
+- Los documentos subidos se limitan a extensiones permitidas (.csv, .md, .txt, .pdf).
+
+## 📚 Documentos incluidos
+
+- `data/ciberseguridad.csv` — Preguntas y respuestas de ciberseguridad básica.
+- `data/ciberseguridad.md` — Guía de seguridad de la información.
+- `docs/01_Politica_Seguridad_CybersecurityDR.md` — Política de seguridad de la información.
+- `docs/02_Plan_Incidentes_DR_CybersecurityDR.md` — Plan de respuesta a incidentes y DR.
+- `docs/03_FAQ_Servicios_CybersecurityDR.md` — FAQ y catálogo de servicios.
+- `docs/04_Inventario_Activos_CybersecurityDR.csv` — Inventario de activos de TI.
+- `docs/05_Controles_Seguridad_CybersecurityDR.csv` — Controles de seguridad NIST.
+- `data/knowledge/` — Carpeta de conocimiento con documentos de referencia.
+
+## 👤 Autor
+
+Proyecto desarrollado para el Challenge Alura Agente — Cybersecurity DR.
