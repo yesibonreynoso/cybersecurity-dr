@@ -217,6 +217,8 @@ with st.sidebar:
     for q in suggested:
         if st.button(q, key=f"sug_{q[:20]}", use_container_width=True):
             st.session_state.messages.append({"role": "user", "content": q})
+            st.session_state.typing = True
+            st.rerun()
 
     st.markdown("---")
     col_a, col_b = st.columns(2)
@@ -287,27 +289,28 @@ if st.session_state.typing and st.session_state.messages:
             last_user_msg = msg
             break
     if last_user_msg:
-        answers = []
-        source_results = []
-        for source in st.session_state.active_sources:
-            if source.exists():
-                try:
-                    ans, used = build_answer_with_sources(last_user_msg["content"], [source])
-                    answers.append(ans)
-                    source_results.extend(used)
-                except Exception as exc:
-                    logger.warning("Error procesando %s: %s", source, exc)
-                    answers.append(f"No se pudo procesar la fuente {source.name}.")
+        try:
+            combined_answer, used_sources = build_answer_with_sources(
+                last_user_msg["content"], st.session_state.active_sources
+            )
+        except Exception as exc:
+            logger.warning("Error generando respuesta: %s", exc)
+            combined_answer = "Error al procesar las fuentes. Inténtalo de nuevo."
+            used_sources = st.session_state.active_sources
 
-        combined = "\n\n".join([a for a in answers if a and not a.startswith("No se pudo")]).strip()
-        if not combined:
-            combined = "No pude encontrar una respuesta en las fuentes activas. Intenta con otra pregunta."
+        if not combined_answer or combined_answer.startswith("No se pudo"):
+            combined_answer = "No pude encontrar una respuesta en las fuentes activas. Intenta con otra pregunta."
 
-        used_sources = list(dict.fromkeys(source_results))
+        knowledge_sources = [
+            s for s in used_sources
+            if s.parent.name in {"docs", "data", "knowledge"} or s.name == "README.md"
+        ]
+        if not knowledge_sources:
+            knowledge_sources = used_sources
         st.session_state.messages.append({
             "role": "assistant",
-            "content": combined,
-            "sources": used_sources,
+            "content": combined_answer,
+            "sources": knowledge_sources,
         })
         st.session_state.typing = False
         st.rerun()
