@@ -45,6 +45,7 @@ Cybersecurity DR Assistant es un agente conversacional que permite consultar inf
 ```
 
 ### Flujo de trabajo
+
 1. El usuario envía una pregunta desde la interfaz web.
 2. `streamlit_app.py` recibe la pregunta y la limpia mediante `sanitize_question()`.
 3. Se obtienen las fuentes activas seleccionadas (CSV, MD, PDF, TXT).
@@ -54,24 +55,26 @@ Cybersecurity DR Assistant es un agente conversacional que permite consultar inf
 
 ## 🛠️ Tecnologías y herramientas
 
-| Componente | Tecnología |
-|------------|------------|
-| Interfaz web | Streamlit 1.44+ |
-| Backend | Python 3.10+ (stdlib) |
-| Parsing CSV | `csv` (stdlib) |
-| Parsing PDF | PyMuPDF (fitz) |
-| Parsing Markdown/TXT | `pathlib` + encoding UTF-8 |
-| Containerización | Docker (python:3.12-slim) |
-| Pruebas | `unittest` (stdlib) |
-| Gestión de dependencias | `requirements.txt` |
+| Componente              | Tecnología                 |
+| ----------------------- | -------------------------- |
+| Interfaz web            | Streamlit 1.44+            |
+| Backend                 | Python 3.10+ (stdlib)      |
+| Parsing CSV             | `csv` (stdlib)             |
+| Parsing PDF             | PyMuPDF (fitz)             |
+| Parsing Markdown/TXT    | `pathlib` + encoding UTF-8 |
+| Containerización        | Docker (python:3.12-slim)  |
+| Pruebas                 | `unittest` (stdlib)        |
+| Gestión de dependencias | `requirements.txt`         |
 
 ## ▶️ Instrucciones de ejecución
 
 ### Requisitos previos
+
 - Python 3.10 o superior
 - pip
 
 ### Instalación local
+
 ```bash
 python -m venv .venv
 .\.venv\Scripts\activate
@@ -79,6 +82,7 @@ pip install -r requirements.txt
 ```
 
 ### Ejecución de la aplicación
+
 ```bash
 .\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.headless true --server.port 8502
 ```
@@ -86,12 +90,14 @@ pip install -r requirements.txt
 La aplicación quedará disponible en `http://localhost:8502`.
 
 ### Ejecución con Docker
+
 ```bash
 docker build -t agente-ciberseguridad .
 docker run -p 8501:8501 agente-ciberseguridad
 ```
 
 ### Ejecución de pruebas
+
 ```bash
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
@@ -121,6 +127,7 @@ docker run -p 8501:8501 agente-ciberseguridad
 ## 📸 Evidencia de despliegue
 
 ### Despliegue en OCI
+
 La aplicación está preparada para desplegarse en Oracle Cloud Infrastructure (OCI) mediante Docker:
 
 1. Construir la imagen: `docker build -t agente-ciberseguridad .`
@@ -128,6 +135,7 @@ La aplicación está preparada para desplegarse en Oracle Cloud Infrastructure (
 3. La aplicación queda disponible en el puerto 8501 del contenedor.
 
 Para producción en OCI, se recomienda:
+
 - Usar una instancia VM.Standard.E2.1.Micro (nivel Always Free) o un shape flexibles.
 - Exponer el puerto 8501 en el security list del VCN.
 - Configurar un reverse proxy (Nginx) con SSL/TLS para acceso HTTPS.
