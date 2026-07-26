@@ -1,26 +1,144 @@
+from html import escape
+import logging
 from pathlib import Path
+from typing import List
 
 import streamlit as st
 
-from herramientas import build_answer
+from herramientas import (
+    build_answer_with_sources,
+    discover_local_documents,
+    format_chat_message,
+    resolve_selected_sources,
+    sanitize_question,
+)
 
-st.set_page_config(page_title="Agente de Ciberseguridad", page_icon="🛡️", layout="wide")
+logger = logging.getLogger(__name__)
+
+st.set_page_config(
+    page_title="Cybersecurity DR Assistant",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 st.markdown(
     """
     <style>
-    .stApp { background: linear-gradient(135deg, #060b13 0%, #121b2e 100%); }
-    .block-container { padding-top: 1rem; }
-    .stTextInput > div > div > input { border-radius: 12px; border: 1px solid #4f7cff; background: rgba(255,255,255,0.04); color: white; }
-    .stButton > button { border-radius: 999px; background: linear-gradient(90deg, #4f7cff, #7b61ff); color: white; }
-    div[data-testid="stFileUploader"] { background: rgba(255,255,255,0.06); border-radius: 16px; padding: 10px; }
-    .chat-bubble-user { background: linear-gradient(90deg, #4f7cff, #7b61ff); color: white; padding: 12px 14px; border-radius: 16px 16px 4px 16px; margin-bottom: 8px; animation: fadeIn 0.35s ease-out; }
-    .chat-bubble-assistant { background: rgba(255,255,255,0.08); color: #f3f7ff; padding: 12px 14px; border-radius: 16px 16px 16px 4px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.08); animation: fadeIn 0.35s ease-out; }
-    .chat-bubble-typing { background: rgba(255,255,255,0.06); color: #dceaff; padding: 12px 14px; border-radius: 16px; margin-bottom: 8px; font-style: italic; }
-    .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 12px; margin-bottom: 10px; transition: transform 0.25s ease, box-shadow 0.25s ease; }
-    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
-    .sidebar .block-container { background: rgba(255,255,255,0.04); border-radius: 18px; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px);} to { opacity: 1; transform: translateY(0);} }
+    *, *::before, *::after { box-sizing: border-box; }
+    .stApp {
+        background: linear-gradient(160deg, #060b13 0%, #0d1424 40%, #111827 100%);
+        min-height: 100vh;
+    }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px; }
+    [data-testid="stSidebar"] { background: rgba(13, 20, 36, 0.95); }
+    .stTextInput > div > div > input {
+        border-radius: 14px;
+        border: 1px solid rgba(79, 124, 255, 0.40);
+        background: rgba(255,255,255,0.05);
+        color: #e8ecf4;
+        padding: 12px 16px;
+        font-size: 0.95rem;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.20);
+        transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .stTextInput > div > div > input:focus {
+        border-color: rgba(79, 124, 255, 0.75);
+        box-shadow: 0 0 0 3px rgba(79,124,255,0.15);
+    }
+    .stTextInput > label { color: #9fb7de; font-size: 0.85rem; }
+    div[data-testid="stFileUploader"] {
+        background: rgba(255,255,255,0.04);
+        border-radius: 14px;
+        padding: 10px;
+        border: 1px solid rgba(255,255,255,0.07);
+    }
+    .chat-shell {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 22px;
+        padding: 18px;
+        background: rgba(8, 13, 24, 0.70);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.30);
+        backdrop-filter: blur(10px);
+        margin-top: 12px;
+        min-height: 400px;
+    }
+    .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 4px 14px 4px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        margin-bottom: 12px;
+    }
+    .chat-avatar {
+        width: 44px; height: 44px; border-radius: 50%;
+        background: linear-gradient(135deg, #4f7cff, #7c61ff, #a855f7);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 1.1rem; color: #fff;
+        box-shadow: 0 4px 16px rgba(79,124,255,0.35);
+    }
+    .chat-bubble-user {
+        background: linear-gradient(135deg, #4f7cff, #6c5ce7);
+        color: #fff; padding: 11px 16px; border-radius: 18px 18px 4px 18px;
+        margin: 10px 0 10px auto; max-width: 78%;
+        box-shadow: 0 6px 20px rgba(79,124,255,0.20);
+        font-size: 0.94rem; line-height: 1.55;
+    }
+    .chat-bubble-assistant {
+        background: rgba(255,255,255,0.06);
+        color: #e8ecf4; padding: 11px 16px;
+        border-radius: 18px 18px 18px 4px;
+        margin: 10px 0; max-width: 78%;
+        border: 1px solid rgba(255,255,255,0.06);
+        font-size: 0.94rem; line-height: 1.55;
+    }
+    .chat-empty {
+        background: linear-gradient(135deg, rgba(79,124,255,0.12), rgba(255,255,255,0.03));
+        color: #c4d4f0; padding: 16px 18px; border-radius: 16px;
+        margin-bottom: 10px; border: 1px solid rgba(79,124,255,0.18);
+        font-size: 0.92rem;
+    }
+    .pill {
+        display: inline-block;
+        background: rgba(79,124,255,0.14);
+        color: #b8caf8;
+        border: 1px solid rgba(79,124,255,0.28);
+        padding: 5px 14px; border-radius: 999px;
+        font-size: 0.88rem; font-weight: 500;
+    }
+    .source-tag {
+        display: inline-block;
+        background: rgba(79,124,255,0.10);
+        color: #8ea6d8;
+        border: 1px solid rgba(79,124,255,0.18);
+        padding: 2px 8px; border-radius: 6px;
+        font-size: 0.75rem; margin-top: 6px;
+    }
+    .follow-up-btn {
+        background: rgba(79,124,255,0.12);
+        color: #c4d6f5;
+        border: 1px solid rgba(79,124,255,0.25);
+        padding: 8px 16px; border-radius: 10px;
+        font-size: 0.84rem; cursor: pointer;
+        transition: all 0.2s; margin: 4px 4px 4px 0;
+    }
+    .follow-up-btn:hover {
+        background: rgba(79,124,255,0.25);
+        border-color: rgba(79,124,255,0.50);
+        color: #fff;
+    }
+    .stButton > button {
+        border-radius: 12px; font-weight: 600;
+        background: linear-gradient(135deg, #4f7cff, #6c5ce7);
+        color: #fff; border: none; padding: 8px 20px;
+    }
+    .stButton > button:hover { opacity: 0.92; }
+    .stMarkdown h1 { color: #e8ecf4; font-size: 1.8rem; }
+    .stMarkdown h2 { color: #c4d6f5; }
+    .streaming-cursor { display: inline-block; width: 8px; height: 14px; background: #7c61ff; margin-left: 2px; border-radius: 2px; animation: blink 0.8s infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+    .source-link { color: #7c9aff; text-decoration: underline; font-size: 0.82rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -29,91 +147,167 @@ st.markdown(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "sources" not in st.session_state:
-    st.session_state.sources = [Path("data/ciberseguridad.csv")]
+    st.session_state.sources = []
 if "active_sources" not in st.session_state:
-    st.session_state.active_sources = [Path("data/ciberseguridad.csv")]
-if "pending_question" not in st.session_state:
-    st.session_state.pending_question = ""
-if "processing" not in st.session_state:
-    st.session_state.processing = False
+    st.session_state.active_sources = []
+if "typing" not in st.session_state:
+    st.session_state.typing = False
 
-st.title("🛡️ Cybersecurity DR Assistant")
-st.caption("Asistente conversacional basado en un documento oficial de Cybersecurity DR y con capacidad para incorporar documentos adicionales como contexto.")
+base_sources = discover_local_documents()
+if base_sources and not st.session_state.sources:
+    st.session_state.sources = base_sources
+if not st.session_state.active_sources and base_sources:
+    st.session_state.active_sources = base_sources
+
+st.markdown("<span class='pill'>🛡️ Asistente documental inteligente</span>", unsafe_allow_html=True)
+st.title("Cybersecurity DR Assistant")
+st.caption("Haz preguntas sobre tus documentos de ciberseguridad. Respuestas fundamentadas en tus fuentes.")
 
 with st.sidebar:
-    st.markdown("## 📚 Resumen de recursos")
-    st.markdown("- Documento oficial: base principal del conocimiento")
-    st.markdown("- Documentos adicionales: aportan contexto extra para responder mejor")
-    st.markdown("- Formatos soportados: CSV, Markdown, TXT y PDF")
-    st.markdown("- Imágenes y texto: también pueden usarse como material de apoyo")
-    st.markdown("---")
-    st.markdown("### 🗂️ Estructura recomendada")
-    st.code("data/knowledge/docs\ndata/knowledge/text\ndata/knowledge/images")
+    st.markdown("### 📂 Configuración de fuentes")
+    st.caption("Formatos compatibles: PDF, Markdown, TXT, CSV")
 
-with st.container():
-    st.markdown("<div class='card'>📄 Documento oficial</div>", unsafe_allow_html=True)
-    st.caption("Este es el documento base principal del asistente.")
     uploaded_files = st.file_uploader(
-        "Sube documentos de conocimiento",
+        "Sube documentos adicionales",
         type=["csv", "md", "markdown", "txt", "pdf"],
         accept_multiple_files=True,
+        label_visibility="collapsed",
+        help="Los archivos se guardan temporalmente en la sesión.",
     )
 
     if uploaded_files:
+        new_added = False
         for uploaded_file in uploaded_files:
-            temp_path = Path("data") / uploaded_file.name
+            name = uploaded_file.name
+            try:
+                from herramientas import validate_uploaded_filename
+                safe_name = validate_uploaded_filename(name)
+            except ValueError as exc:
+                st.error(f"Archivo rechazado: {exc}")
+                continue
+            temp_path = Path("data") / safe_name
             temp_path.parent.mkdir(exist_ok=True)
             temp_path.write_bytes(uploaded_file.getvalue())
             if temp_path not in st.session_state.sources:
                 st.session_state.sources.append(temp_path)
-        st.success("Documentos cargados correctamente")
+                new_added = True
+        if new_added:
+            st.success("Documentos cargados correctamente")
 
-    st.markdown("<div class='card'>🧠 Contexto adicional</div>", unsafe_allow_html=True)
-    st.caption("Puedes agregar documentos extra para enriquecer las respuestas.")
+    if st.session_state.sources:
+        label_names = [p.name for p in st.session_state.sources]
+        selected = st.multiselect(
+            "Fuentes activas",
+            label_names,
+            default=[p.name for p in st.session_state.active_sources],
+            help="Selecciona las fuentes que deseas consultar.",
+        )
+        st.session_state.active_sources = resolve_selected_sources(selected, st.session_state.sources)
 
-    st.markdown("<div class='card'>🔗 Fuentes activas</div>", unsafe_allow_html=True)
-    source_labels = [path.name for path in st.session_state.sources]
-    selected_sources = st.multiselect(
-        "Activa las fuentes que quieras usar",
-        source_labels,
-        default=[path.name for path in st.session_state.active_sources],
+    st.markdown("---")
+    st.markdown("### 📋 Preguntas sugeridas")
+    suggested = [
+        "¿Qué es el phishing?",
+        "¿Cómo protegerme de un ransomware?",
+        "¿Qué es la autenticación multifactor?",
+        "¿Qué hacer si detecto un ataque?",
+        "¿Qué servicios ofrece Cybersecurity DR?",
+        "¿Cómo solicitar un presupuesto?",
+    ]
+    for q in suggested:
+        if st.button(q, key=f"sug_{q[:20]}", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": q})
+
+    st.markdown("---")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("🗑️ Limpiar historial", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+    with col_b:
+        if st.session_state.messages:
+            st.download_button(
+                "📥 Exportar chat",
+                data="\n".join(
+                    f"[{m['role'].upper()}] {m['content']}" for m in st.session_state.messages
+                ),
+                file_name="conversacion_chat.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+st.markdown("<div class='chat-shell'>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='chat-header'><div class='chat-avatar'>DR</div><div><strong>Cybersecurity DR</strong><br><span style='color:#9fb7de'>Asistente documental</span></div></div>",
+    unsafe_allow_html=True,
+)
+
+if not st.session_state.messages:
+    st.markdown(
+        "<div class='chat-empty'>👋 ¡Hola! Soy el asistente de ciberseguridad de Cybersecurity DR. "
+        "Hazme una pregunta sobre nuestras políticas, servicios o documentos de seguridad.</div>",
+        unsafe_allow_html=True,
     )
-    st.session_state.active_sources = [Path("data") / name for name in selected_sources]
 
 for message in st.session_state.messages:
-    if message["role"] == "user":
-        st.markdown(f"<div class='chat-bubble-user'>🧑 {message['content']}</div>", unsafe_allow_html=True)
-    elif message["role"] == "assistant":
-        bubble_type = "chat-bubble-typing" if message["content"].startswith("✍️") else "chat-bubble-assistant"
-        st.markdown(f"<div class='{bubble_type}'>🤖 {message['content']}</div>", unsafe_allow_html=True)
+    bubble_class = "chat-bubble-user" if message["role"] == "user" else "chat-bubble-assistant"
+    if message["role"] == "assistant":
+        rendered = format_chat_message(message["content"])
+        source_info = message.get("sources", [])
+        if source_info:
+            source_names = ", ".join(s.name for s in source_info)
+            rendered += f'<div class="source-tag">📄 Fuentes: {escape(source_names)}</div>'
+        st.markdown(f"<div class='{bubble_class}'>{rendered}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='{bubble_class}'>{escape(message['content'])}</div>", unsafe_allow_html=True)
 
-question = st.text_input("Escribe tu pregunta", placeholder="Ej. ¿Qué hacer si detecto un phishing?")
+if st.session_state.typing:
+    st.markdown(
+        '<div class="chat-bubble-assistant"><span class="streaming-cursor"></span> Analizando documentos…</div>',
+        unsafe_allow_html=True,
+    )
 
-if st.button("Responder", use_container_width=True) and question.strip():
-    st.session_state.pending_question = question.strip()
-    st.session_state.messages.append({"role": "user", "content": question.strip()})
-    st.session_state.messages.append({"role": "assistant", "content": "✍️ Escribiendo..."})
-    st.session_state.processing = True
-    st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
 
-if st.session_state.processing and st.session_state.pending_question:
-    answers = []
-    for source in st.session_state.active_sources:
-        if source.exists():
-            answers.append(build_answer(st.session_state.pending_question, source))
+question = st.chat_input("Escribe tu pregunta aquí…")
 
-    combined = "\n\n".join([answer for answer in answers if answer]).strip()
-    if not combined:
-        combined = "No pude encontrar una respuesta en las fuentes activas."
+if question and question.strip():
+    question_text = sanitize_question(question.strip())
+    if not question_text:
+        st.warning("Por favor, introduce una pregunta válida.")
+    else:
+        st.session_state.messages.append({"role": "user", "content": question_text})
+        st.session_state.typing = True
+        st.rerun()
 
-    if st.session_state.messages:
-        st.session_state.messages[-1] = {"role": "assistant", "content": combined}
-    st.session_state.pending_question = ""
-    st.session_state.processing = False
-    st.rerun()
+if st.session_state.typing and st.session_state.messages:
+    last_user_msg = None
+    for msg in reversed(st.session_state.messages):
+        if msg["role"] == "user":
+            last_user_msg = msg
+            break
+    if last_user_msg:
+        answers = []
+        source_results = []
+        for source in st.session_state.active_sources:
+            if source.exists():
+                try:
+                    ans, used = build_answer_with_sources(last_user_msg["content"], [source])
+                    answers.append(ans)
+                    source_results.extend(used)
+                except Exception as exc:
+                    logger.warning("Error procesando %s: %s", source, exc)
+                    answers.append(f"No se pudo procesar la fuente {source.name}.")
 
-if st.button("Limpiar historial", use_container_width=True):
-    st.session_state.messages = []
-    st.session_state.pending_question = ""
-    st.session_state.processing = False
-    st.rerun()
+        combined = "\n\n".join([a for a in answers if a and not a.startswith("No se pudo")]).strip()
+        if not combined:
+            combined = "No pude encontrar una respuesta en las fuentes activas. Intenta con otra pregunta."
+
+        used_sources = list(dict.fromkeys(source_results))
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": combined,
+            "sources": used_sources,
+        })
+        st.session_state.typing = False
+        st.rerun()
